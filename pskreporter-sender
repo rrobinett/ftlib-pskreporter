@@ -14,6 +14,8 @@ Options:
   --locator=<locator>     The locator for the radio -- at least 6 characters
   --antenna=<antenna>     The antenna used on the radio
   --software=<software-version>   The decoding software in use
+  --snr         FT8/FT4: the number before DT in each line is the SNR in dB, as WSJT-X's
+                decoder reports it, rather than ft8_lib's sync score: send it as the spot's SNR
 """
 
 from pskreporter import PskReporter
@@ -138,8 +140,10 @@ def do_wspr(stream, pskreporter, mode):
             logging.error(f"Failed to create spot ({e}): {original_line}")
 
 
-def submit(stream, pskreporter, mode):
+def submit(stream, pskreporter, mode, snr=False):
     # It turns out that the field that I thought was snr is actually a score and is fairly unrelated to snr.
+    # That is ft8_lib's decode_ft8.  A log written by WSJT-X's decoder in the same format (WsprDaemon's wd-ft-decode,
+    # which runs WSJT-X's jt9) has the SNR in dB there, and with --snr it is sent as the spot's SNR.
     r = re.compile(
         r"(?P<ts>[0-9/]+ [0-9:]+) +(?P<score>[-0-9]+) +(?P<dt>[-+.0-9]+) (?P<freq>[0-9,.]+) ~ (?P<msg>.*)$"
     )
@@ -188,6 +192,7 @@ def submit(stream, pskreporter, mode):
                         mode=mode,
                         timestamp=ts,
                         frequency=freq,
+                        db=int(m.group("score")) if snr else None,
                         locator=match.group("locator"),
                         hexbytes=raw_hex,
                     )
@@ -245,7 +250,7 @@ if __name__ == "__main__":
         elif mode == "js8":
             do_js8(proc.stdout, pskreporter, mode.upper())
         else:
-            submit(proc.stdout, pskreporter, mode.upper())
+            submit(proc.stdout, pskreporter, mode.upper(), snr=args["--snr"])
     except KeyboardInterrupt:
         pass
     except Exception as e:
